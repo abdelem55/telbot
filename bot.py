@@ -1,12 +1,36 @@
+import os
+import sys
+import subprocess
+
+# --- 1. إجبار الحاوية على تثبيت المكتبات الناقصة برمجياً ---
+def install_dependencies():
+    required_libraries = ["requests", "feedparser"]
+    for lib in required_libraries:
+        try:
+            __import__(lib)
+        except ImportError:
+            print(f"📦 Library '{lib}' missing. Installing it now...")
+            try:
+                # تشغيل أمر التثبيت صامتًا لتجنب المشاكل
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", lib])
+                print(f"✅ '{lib}' installed successfully!")
+            except Exception as e:
+                print(f"❌ Failed to install '{lib}': {e}")
+                sys.exit(1)
+
+# تشغيل الفحص والتثبيت قبل أي شيء آخر
+install_dependencies()
+
+# الآن نقوم باستدعاء المكتبات بأمان بعد التأكد من تثبيتها
 import time
 import requests
 import feedparser
 
-# --- إعدادات التليجرام (ضع بياناتك هنا) ---
+# --- 2. إعدادات التليجرام (ضع بياناتك هنا) ---
 TOKEN = "6767377177:AAEw_qkCMmUfeeakSrTqugd3b96eK59a3c4"
 CHAT_ID = "5623578870"
 
-# --- قائمة المصادر (RSS Feeds) ---
+# --- 3. قائمة المصادر (RSS Feeds) ---
 SOURCES = {
     "The Hacker News": "https://feeds.feedburner.com/TheHackersNews",
     "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
@@ -14,11 +38,9 @@ SOURCES = {
     "Packet Storm": "https://rss.packetstormsecurity.com/news/"
 }
 
-# قائمة لتخزين الروابط المرسلة سابقاً حتى لا تتكرر الأخبار
 sent_articles = set()
 
 def send_telegram_message(text):
-    """دالة إرسال الرسائل إلى تليجرام"""
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -26,37 +48,29 @@ def send_telegram_message(text):
         "parse_mode": "Markdown"
     }
     try:
-        requests.post(url, json=payload)
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         print(f"Error sending message: {e}")
 
 def check_news():
-    """دالة فحص المصادر وجلب الجديد"""
-    print("Checking for new updates...")
+    print("🔍 Checking for new updates...")
     for source_name, url in SOURCES.items():
         try:
             feed = feedparser.parse(url)
-            # نأخذ آخر 3 أخبار فقط من كل مصدر في كل جولة فحص
             for entry in feed.entries[:3]:
                 link = entry.link
-                
-                # إذا كان الخبر لم يرسل من قبل
                 if link not in sent_articles:
                     title = entry.title
-                    
-                    # صياغة الرسالة
                     message = f"🚨 *{source_name}* 🚨\n\n📌 *Title:* {title}\n\n🔗 [Read More]({link})"
-                    
                     send_telegram_message(message)
                     sent_articles.add(link)
-                    time.sleep(2) # تأخير بسيط لتجنب الحظر من تليجرام
+                    time.sleep(2) 
         except Exception as e:
             print(f"Error parsing {source_name}: {e}")
 
-# --- تشغيل البوت بشكل مستمر ---
+# --- 4. تشغيل البوت ---
 if __name__ == "__main__":
-    print("Bot is running...")
+    print("🚀 Bot bypass initialized. Ready to fetch cyber security news!")
     while True:
         check_news()
-        # انتظر ساعة كاملة (3600 ثانية) قبل الفحص المرة القادمة
-        time.sleep(3600)
+        time.sleep(3600)  # فحص كل ساعة
