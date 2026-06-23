@@ -2,37 +2,33 @@ import os
 import sys
 import subprocess
 
-# --- 1. التثبيت التلقائي للمكتبات لضمان عدم توقف الحاوية ---
+# --- 1. التثبيت التلقائي للمكتبات ---
 def install_dependencies():
-    required = ["requests", "feedparser", "beautifulsoup4"]
+    required = ["requests", "beautifulsoup4"]
     for lib in required:
         try:
             __import__(lib.replace("beautifulsoup4", "bs4"))
         except ImportError:
-            print(f"📦 Installing {lib}...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", lib])
 
 install_dependencies()
 
 import time
-import re
 import requests
-import feedparser
 from bs4 import BeautifulSoup
 
-# --- 2. إعدادات التليجرام (ضع بياناتك هنا) ---
+# --- 2. الإعدادات ---
 TOKEN = "6767377177:AAEw_qkCMmUfeeakSrTqugd3b96eK59a3c4"
 CHAT_ID = "5623578870"
 
-# --- 3. مصادر روابط كانفا برو (مدونات تقنية ومنصات تحديث روابط) ---
-SOURCES = {
-    "Bingo Tingo Updates": "https://bingotingo.com/feed/",
-    "Tech Edu Byte": "https://techedubyte.com/feed/",
-    "Infoxp": "https://infoxp.com/feed/",
-    "Daily Canva Teams": "https://www.alltechbuzz.net/feed/"
-}
+TARGET_PAGES = [
+    "https://bingotingo.com/best-social-media-platforms/",
+    "https://infoxp.com/canva-pro-invite-link/",
+    "https://techedubyte.com/how-to-get-canva-pro-for-free/"
+]
 
-sent_links = set()
+# ذاكرة البوت لحفظ آخر رابط تم إرساله من كل موقع لمنع تكرار الروابط الميتة
+last_sent_links = {}
 
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -40,44 +36,56 @@ def send_telegram_message(text):
         "chat_id": CHAT_ID,
         "text": text,
         "parse_mode": "Markdown",
-        "disable_web_page_preview": False
+        "disable_web_page_preview": True
     }
     try:
         requests.post(url, json=payload, timeout=15)
     except Exception as e:
-        print(f"Error sending to Telegram: {e}")
+        print(f"Error: {e}")
 
-def check_canva_links():
-    print("🔍 Searching for new Canva Pro Links...")
-    for source_name, url in SOURCES.items():
+def scrape_live_links():
+    print("🔄 Scanning for FRESH & NEW Canva Pro links...")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
+    for url in TARGET_PAGES:
         try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:5]: # فحص آخر 5 مقالات
-                title = entry.title.lower()
-                link = entry.link
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                all_links = soup.find_all('a', href=True)
                 
-                # التحقق مما إذا كان المقال يتحدث عن Canva Pro أو Canva Team
-                if "canva" in title and link not in sent_links:
+                for link in all_links:
+                    href = link['href']
                     
-                    # صياغة رسالة تنبيهية بالرابط المباشر للمقال الذي يحتوي على الدعوة
-                    message = (
-                        f"🎨 ✨ *New Canva Pro Link Detected!* ✨ 🎨\n\n"
-                        f"📌 *Source:* {source_name}\n"
-                        f"📝 *Article:* {entry.title}\n\n"
-                        f"🔗 *Get your Link Here:* {link}\n\n"
-                        f"⏰ _Hurry up before the team gets full (Max 500 members)!_"
-                    )
-                    
-                    send_telegram_message(message)
-                    sent_links.add(link)
-                    time.sleep(2)
+                    if "canva.com" in href and "join" in href:
+                        # الحصول على الرابط القديم المخزن لهذا الموقع تحديداً
+                        previous_link = last_sent_links.get(url)
+                        
+                        # شرط صارم: لا ترسل الرابط إلا إذا كان "جديداً ومختلفاً" عن آخر رابط أرسلناه من هذا الموقع
+                        if href != previous_link:
+                            
+                            message = (
+                                f"🔥 ✨ *⚠️ FRESH CANVA PRO LINK DETECTED!* ✨ 🔥\n\n"
+                                f"📢 *Status:* This is a newly updated team link!\n\n"
+                                f"🔗 [Click Here to Join the New Team]({href})\n\n"
+                                f"⏱ _Note: Teams fill up within 10-15 minutes of update, act fast!_"
+                            )
+                            
+                            send_telegram_message(message)
+                            # تحديث الذاكرة بالرابط الجديد
+                            last_sent_links[url] = href
+                            time.sleep(2)
+                            break # نكتفي بأول رابط جديد نLetterه في الصفحة
         except Exception as e:
-            print(f"Error checking {source_name}: {e}")
+            print(f"Error scanning {url}: {e}")
 
-# --- 4. تشغيل البوت ---
 if __name__ == "__main__":
-    print("🚀 Canva Pro Link Finder Bot is running...")
+    print("🚀 Fresh Canva Filter Bot is running...")
+    send_telegram_message("📡 *Canva Filter Bot:* Started. I will only alert you when a link is UPDATED or CHANGED on the websites.")
+    
     while True:
-        check_canva_links()
-        # فحص كل 30 دقيقة لأن روابط كانفا تمتلئ بسرعة وتغلق
-        time.sleep(1800)
+        scrape_live_links()
+        # فحص كل 10 دقائق (600 ثانية) لصيد التحديث فور حدوثه
+        time.sleep(600)
