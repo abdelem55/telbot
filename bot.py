@@ -2,75 +2,82 @@ import os
 import sys
 import subprocess
 
-# --- 1. إجبار الحاوية على تثبيت المكتبات الناقصة برمجياً ---
+# --- 1. التثبيت التلقائي للمكتبات لضمان عدم توقف الحاوية ---
 def install_dependencies():
-    required_libraries = ["requests", "feedparser"]
-    for lib in required_libraries:
+    required = ["requests", "feedparser", "beautifulsoup4"]
+    for lib in required:
         try:
-            __import__(lib)
+            __import__(lib.replace("beautifulsoup4", "bs4"))
         except ImportError:
-            print(f"📦 Library '{lib}' missing. Installing it now...")
-            try:
-                # تشغيل أمر التثبيت صامتًا لتجنب المشاكل
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", lib])
-                print(f"✅ '{lib}' installed successfully!")
-            except Exception as e:
-                print(f"❌ Failed to install '{lib}': {e}")
-                sys.exit(1)
+            print(f"📦 Installing {lib}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", lib])
 
-# تشغيل الفحص والتثبيت قبل أي شيء آخر
 install_dependencies()
 
-# الآن نقوم باستدعاء المكتبات بأمان بعد التأكد من تثبيتها
 import time
+import re
 import requests
 import feedparser
+from bs4 import BeautifulSoup
 
 # --- 2. إعدادات التليجرام (ضع بياناتك هنا) ---
 TOKEN = "6767377177:AAEw_qkCMmUfeeakSrTqugd3b96eK59a3c4"
 CHAT_ID = "5623578870"
 
-# --- 3. قائمة المصادر (RSS Feeds) ---
+# --- 3. مصادر روابط كانفا برو (مدونات تقنية ومنصات تحديث روابط) ---
 SOURCES = {
-    "The Hacker News": "https://feeds.feedburner.com/TheHackersNews",
-    "BleepingComputer": "https://www.bleepingcomputer.com/feed/",
-    "Exploit-DB": "https://www.exploit-db.com/rss.xml",
-    "Packet Storm": "https://rss.packetstormsecurity.com/news/"
+    "Bingo Tingo Updates": "https://bingotingo.com/feed/",
+    "Tech Edu Byte": "https://techedubyte.com/feed/",
+    "Infoxp": "https://infoxp.com/feed/",
+    "Daily Canva Teams": "https://www.alltechbuzz.net/feed/"
 }
 
-sent_articles = set()
+sent_links = set()
 
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
         "text": text,
-        "parse_mode": "Markdown"
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": False
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        requests.post(url, json=payload, timeout=15)
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Error sending to Telegram: {e}")
 
-def check_news():
-    print("🔍 Checking for new updates...")
+def check_canva_links():
+    print("🔍 Searching for new Canva Pro Links...")
     for source_name, url in SOURCES.items():
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:3]:
+            for entry in feed.entries[:5]: # فحص آخر 5 مقالات
+                title = entry.title.lower()
                 link = entry.link
-                if link not in sent_articles:
-                    title = entry.title
-                    message = f"🚨 *{source_name}* 🚨\n\n📌 *Title:* {title}\n\n🔗 [Read More]({link})"
+                
+                # التحقق مما إذا كان المقال يتحدث عن Canva Pro أو Canva Team
+                if "canva" in title and link not in sent_links:
+                    
+                    # صياغة رسالة تنبيهية بالرابط المباشر للمقال الذي يحتوي على الدعوة
+                    message = (
+                        f"🎨 ✨ *New Canva Pro Link Detected!* ✨ 🎨\n\n"
+                        f"📌 *Source:* {source_name}\n"
+                        f"📝 *Article:* {entry.title}\n\n"
+                        f"🔗 *Get your Link Here:* {link}\n\n"
+                        f"⏰ _Hurry up before the team gets full (Max 500 members)!_"
+                    )
+                    
                     send_telegram_message(message)
-                    sent_articles.add(link)
-                    time.sleep(2) 
+                    sent_links.add(link)
+                    time.sleep(2)
         except Exception as e:
-            print(f"Error parsing {source_name}: {e}")
+            print(f"Error checking {source_name}: {e}")
 
 # --- 4. تشغيل البوت ---
 if __name__ == "__main__":
-    print("🚀 Bot bypass initialized. Ready to fetch cyber security news!")
+    print("🚀 Canva Pro Link Finder Bot is running...")
     while True:
-        check_news()
-        time.sleep(3600)  # فحص كل ساعة
+        check_canva_links()
+        # فحص كل 30 دقيقة لأن روابط كانفا تمتلئ بسرعة وتغلق
+        time.sleep(1800)
